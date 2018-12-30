@@ -401,28 +401,27 @@ bool RF24Mesh::requestAddress(uint8_t level)
             #endif
         }
 
-        if (millis() - timr > 55 || pollCount >= MESH_MAXPOLLS)
+        if ((millis() - timr) > 55 || (pollCount >= MESH_MAXPOLLS))
         {
             if (!pollCount)
             {
-#if defined(MESH_DEBUG_SERIAL)
+                #if defined(MESH_DEBUG_SERIAL)
                 Serial.print(millis());
                 Serial.print(F(" MSH: No poll from level "));
                 Serial.println(level);
-#elif defined(MESH_DEBUG_PRINTF)
+                #elif defined(MESH_DEBUG_PRINTF)
                 printf("%u MSH: No poll from level %d\n", millis(), level);
-#endif
+                #endif
                 return 0;
             }
             else
             {
-
-#if defined(MESH_DEBUG_SERIAL)
+                #if defined(MESH_DEBUG_SERIAL)
                 Serial.print(millis());
                 Serial.println(F(" MSH: Poll OK "));
-#elif defined(MESH_DEBUG_PRINTF)
+                #elif defined(MESH_DEBUG_PRINTF)
                 printf("%u MSH: Poll OK\n", millis());
-#endif
+                #endif
                 break;
             }
         }
