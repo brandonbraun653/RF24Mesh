@@ -65,6 +65,8 @@
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
   <ItemGroup>
+    <ClCompile Include="mesh_master.cpp" />
+    <ClInclude Include="mesh_master.hpp" />
     <None Include="stm32.props" />
     <ClCompile Include="$(EFP_BASE)\Profiler\FastSemihosting.cpp" />
     <ClCompile Include="$(EFP_BASE)\Profiler\SamplingProfiler.cpp" />
@@ -76,11 +78,7 @@
     <ClInclude Include="$(EFP_BASE)\Profiler\ProfilerFreeRTOSHooks.h" />
     <ClInclude Include="$(EFP_BASE)\Profiler\CustomRealTimeWatches.h" />
     <ClInclude Include="$(EFP_BASE)\Profiler\DebuggerChecker.h" />
-    <ClCompile Include="helloworld_rx.cpp" />
-    <ClCompile Include="serverThread.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClInclude Include="helloworld_rx.hpp" />
-    <ClInclude Include="serverThread.hpp" />
     <ClCompile Include="$(GIT_PROJECTS_ROOT)\DeviceDrivers\nRF24L01\nrf24l01Definitions.cpp" />
     <ClCompile Include="$(GIT_PROJECTS_ROOT)\DeviceDrivers\nRF24L01\nrf24l01.cpp" />
     <ClInclude Include="$(GIT_PROJECTS_ROOT)\DeviceDrivers\nRF24L01\nrf24l01.hpp" />

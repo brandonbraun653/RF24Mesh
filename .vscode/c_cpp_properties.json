@@ -3,12 +3,15 @@
         {
             "name": "Win32",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "${env:GIT_PROJECTS_ROOT}/DeviceDrivers/nRF24L01/**",
+                "${env:GIT_PROJECTS_ROOT}/GitHub/RF24Network/**"
             ],
             "defines": [
                 "_DEBUG",
                 "UNICODE",
-                "_UNICODE"
+                "_UNICODE",
+                "USING_CHIMERA"
             ],
             "windowsSdkVersion": "10.0.17763.0",
             "compilerPath": "C:/Program Files (x86)/Microsoft Visual Studio/2019/Preview/VC/Tools/MSVC/14.20.27027/bin/Hostx64/x64/cl.exe",

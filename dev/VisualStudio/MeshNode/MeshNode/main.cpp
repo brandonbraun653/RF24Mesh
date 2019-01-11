@@ -8,12 +8,12 @@
 #include <Chimera/utilities.hpp>
 #include <Chimera/gpio.hpp>
 
-#include "mesh_master.hpp"
+#include "mesh_node.hpp"
 
 using namespace Chimera::Threading;
 using namespace Chimera::GPIO;
 
-void ledThread(void* argument);
+void ledThread(void *argument);
 
 int main(void)
 {
@@ -25,7 +25,7 @@ int main(void)
     #endif
 
     addThread(ledThread, "led", 150, NULL, 2, NULL);
-    addThread(meshMasterThread, "mesh", 2000, NULL, 3, NULL);
+    addThread(meshNodeThread, "mesh", 2000, NULL, 3, NULL);
 
     startScheduler();
 
@@ -36,11 +36,10 @@ int main(void)
     }
 }
 
-
 void ledThread(void* argument)
 {
     GPIOClass led;
-    led.init(Port::PORTB, 7);
+    led.init(Port::PORTA, 5);
     led.setMode(Drive::OUTPUT_PUSH_PULL, false);
     led.setState(State::LOW);
 
@@ -55,3 +54,5 @@ void ledThread(void* argument)
         vTaskDelayUntil(&lastTimeWoken, pdMS_TO_TICKS(500));
     }
 }
+
+

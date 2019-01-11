@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.168
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MeshNode", "MeshNode\MeshNode.vcxproj", "{C554DD33-B015-4519-8315-385A9D14D3B3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|VisualGDB = Debug|VisualGDB
+		Release|VisualGDB = Release|VisualGDB
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C554DD33-B015-4519-8315-385A9D14D3B3}.Debug|VisualGDB.ActiveCfg = Debug|VisualGDB
+		{C554DD33-B015-4519-8315-385A9D14D3B3}.Debug|VisualGDB.Build.0 = Debug|VisualGDB
+		{C554DD33-B015-4519-8315-385A9D14D3B3}.Release|VisualGDB.ActiveCfg = Release|VisualGDB
+		{C554DD33-B015-4519-8315-385A9D14D3B3}.Release|VisualGDB.Build.0 = Release|VisualGDB
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {68D2E433-AED0-4938-9779-0DD5E3A92EA9}
+	EndGlobalSection
+EndGlobal
