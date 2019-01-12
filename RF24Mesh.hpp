@@ -44,7 +44,8 @@ namespace RF24Mesh
         *   @return True if success, False if not
         */
         bool begin(const uint8_t channel = MESH_DEFAULT_CHANNEL,
-                   const NRF24L::DataRate data_rate = NRF24L::DataRate::DR_1MBPS,
+                   const NRF24L::DataRate dataRate = NRF24L::DataRate::DR_1MBPS,
+                   const NRF24L::PowerAmplitude pwr = NRF24L::PowerAmplitude::MAX,
                    const uint32_t timeout = MESH_RENEWAL_TIMEOUT);
 
         /**
@@ -52,7 +53,7 @@ namespace RF24Mesh
         *
         *   @return ?
         */
-        uint8_t update();
+        RF24Network::MessageType update();
 
         /**
         *   Write a message onto the network
@@ -68,9 +69,21 @@ namespace RF24Mesh
         *   @return True if success, False if failed
         */
         bool write(const void *const data,
-                   const uint8_t msg_type,
+                   const RF24Network::MessageType msgType,
                    const size_t size,
                    const uint8_t nodeID = 0);
+
+        /**
+        *   Write to a specific node by RF24Network address.
+        *
+        *   @param[in]  node        The node to write to
+        *   @param[in]  data        The data to be written
+        *   @param[in]  size        The length of the data
+        */
+        bool writeTo(const uint16_t node,
+                     const void *const data,
+                     const RF24Network::MessageType msg_type,
+                     const size_t size);
 
         /**
         *   Set a unique nodeID for this node. This value is stored in program memory, so is saved after loss of power.
@@ -84,20 +97,20 @@ namespace RF24Mesh
         void setNodeID(const uint8_t nodeID);
 
         /**
-        *   Only to be used on the master node. Provides automatic configuration for sensor nodes, similar to DHCP.
-        *   Call immediately after calling network.update() to ensure address requests are handled appropriately.
-        *
-        *   @return void
-        */
-        void DHCP();
-
-        /**
         *   Convert an RF24Network address into a nodeId.
         *
         *   @param[in]  address     If no address is provided, returns the local nodeID, otherwise a lookup request is sent to the master node
         *   @return Returns the unique identifier (1-255) or -1 if not found.
         */
         int16_t getNodeID(const uint16_t address = MESH_BLANK_ID);
+
+        /**
+        *   Only to be used on the master node. Provides automatic configuration for sensor nodes, similar to DHCP.
+        *   Call immediately after calling network.update() to ensure address requests are handled appropriately.
+        *
+        *   @return void
+        */
+        void DHCP();
 
         /**
         *   Tests connectivity of this node to the mesh
@@ -120,7 +133,7 @@ namespace RF24Mesh
         *   @param[in]  timeout     How long to attempt address renewal in milliseconds default:60000
         *   @return Returns the newly assigned RF24Network address
         */
-        uint16_t renewAddress(const uint32_t timeout = MESH_RENEWAL_TIMEOUT);
+        bool renewAddress(uint16_t &newAddress, const uint32_t timeout = MESH_RENEWAL_TIMEOUT);
 
         /**
         *   Releases the currently assigned address lease. Useful for nodes that will be sleeping etc.
@@ -140,21 +153,12 @@ namespace RF24Mesh
         int16_t getAddress(const uint8_t nodeID);
 
         /**
-        *   Write to a specific node by RF24Network address.
-        *
-        *   @param[in]  node        The node to write to
-        *   @param[in]  data        The data to be written
-        *   @param[in]  size        The length of the data
-        */
-        bool writeTo(const uint16_t node, const void *const data, const uint8_t msg_type, const size_t size);
-
-        /**
         *   Change the active radio channel after the mesh has been started.
         *
         *   @param[in]  channel     The new channel to be set
         *   @return void
         */
-        void setChannel(uint8_t channel);
+        void setChannel(const uint8_t channel);
 
         /**
         *   Allow child nodes to discover and attach to this node.
@@ -173,17 +177,7 @@ namespace RF24Mesh
         */
         void setAddress(const uint8_t nodeID, const uint16_t address);
 
-        /**
-        *   TODO
-        */
-        void saveDHCP();
-
-        /**
-        *   TODO
-        */
-        void loadDHCP();
-
-        uint16_t mesh_address; /**< The assigned RF24Network (Octal) address of this node */
+        uint16_t meshNetworkAddress; /**< The assigned RF24Network (Octal) address of this node */
 
         struct AddressList
         {
@@ -191,13 +185,15 @@ namespace RF24Mesh
             uint16_t address;
         };
 
-        uint8_t addrListTop;      /**< The number of entries in the assigned address list */
+        uint8_t addressListTop;      /**< The number of entries in the assigned address list */
         AddressList *addressList; /**< Pointer used for dynamic memory allocation of address list*/
 
+        ErrorType oopsies = ErrorType::NO_ERROR;
+
     private:
-        bool doDHCP;    /**< Indicator that an address request is available */
+        bool processDHCPRequest;    /**< Indicator that an address request is available */
         uint8_t nodeID; /**< TODO */
-        uint8_t radio_channel;
+        uint8_t radioChannel;
         uint16_t lastID;
         uint16_t lastAddress;
         uint32_t lastSaveTime;

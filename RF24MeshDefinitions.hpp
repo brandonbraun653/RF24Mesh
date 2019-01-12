@@ -17,25 +17,34 @@
 namespace RF24Mesh
 {
     /**
-    *   Networking message types to identify various messages.
-    *   @note These should not conflict with those defined in RF24NetworkDefinitions.hpp
+    *   Various types of errors that can occur
     */
-    enum class MessageType : uint8_t
+    enum class ErrorType : uint8_t
     {
-        MESH_ADDR_CONFIRM = 129,
+        NO_ERROR = 0,
+        FAILED_INIT,
+        FAILED_WRITE,
+        FAILED_ADDR_REQUEST,
+        FAILED_ADDR_CONFIRM,
+        FAILED_ADDR_LOOKUP,
+        NOT_CONFIGURED,
+        PENDING_DATA,
+        TIMEOUT,
+        POLL_FAIL,
+        NO_RESPONSE,
+        INVALID_PARAM,
 
-        MESH_ADDR_LOOKUP = 196,
-        MESH_ADDR_RELEASE = 197,
-        MESH_ID_LOOKUP = 198,
     };
 
     constexpr uint16_t MESH_BLANK_ID = 65535;
+    constexpr int16_t MESH_MASTER_NODE_ID = 0;
+    constexpr uint8_t MESH_MAXPOLLS = 4u;
+    constexpr uint8_t MESH_POLL_TIMEOUT_MS = 55u;
 
     /*------------------------------------------------
     Generic User Config
     ------------------------------------------------*/
     constexpr uint8_t MESH_MAX_CHILDREN = 4; /** Set 1 to 4 (Default: 4) Restricts the maximum children per node. **/
-    //#define MESH_NOMASTER                                     /** This can be set to 0 for all nodes except the master (nodeID 0) to save pgm space **/
 
     /*------------------------------------------------
     Advanced User Config
