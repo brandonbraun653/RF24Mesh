@@ -65,7 +65,7 @@ namespace RF24Mesh
     ------------------------------------------------*/
     constexpr uint8_t MESH_MAX_ADDRESSES = 255;    /** Determines the max size of the array used for storing addresses on the Master Node */
     constexpr uint16_t MESH_MIN_SAVE_TIME = 30000; /** Minimum time required before changing nodeID. Prevents excessive writing to EEPROM */
-    constexpr uint16_t MESH_DEFAULT_ADDRESS = RF24Network::DEFAULT_ADDRESS;
+    constexpr uint16_t MESH_DEFAULT_ADDRESS = RF24Network::DEFAULT_LOGICAL_ADDRESS;
     constexpr uint16_t MESH_ADDRESS_HOLD_TIME = 30000; /** How long before a released address becomes available */
 }
 
