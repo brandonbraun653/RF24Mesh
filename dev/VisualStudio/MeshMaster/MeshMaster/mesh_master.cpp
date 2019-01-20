@@ -107,9 +107,9 @@ void meshMasterThread(void *argument)
         {
             displayTimer = millis();
             printf("\r\n**********Assigned Addresses**********\r\n");
-            for(int i=0; i <mesh.addressListTop; i++)
+            for(int i=0; i <mesh.addressList.size(); i++)
             {
-                printf("NodeID: %d, Network Address: 0%o", mesh.addressList[i].nodeID, mesh.addressList[i].address);
+                printf("NodeID: %d, Network Address: 0%o\r\n", mesh.addressList[i].id, mesh.addressList[i].logicalAddress);
             }
             printf("**************************************\r\n");
         }

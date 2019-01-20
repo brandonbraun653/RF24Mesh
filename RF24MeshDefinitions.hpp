@@ -37,14 +37,14 @@ namespace RF24Mesh
     };
 
     constexpr uint16_t MESH_BLANK_ID = 65535;
-    constexpr int16_t MESH_MASTER_NODE_ID = 0;
+    constexpr int16_t MESH_MASTER_NODE_ID = 0;      /**< Identifies the logical master node. DO NOT change this number from zero (0).*/
     constexpr uint8_t MESH_MAXPOLLS = 4u;
     constexpr uint8_t MESH_POLL_TIMEOUT_MS = 55u;
 
     /*------------------------------------------------
     Generic User Config
     ------------------------------------------------*/
-    constexpr uint8_t MESH_MAX_CHILDREN = 4; /** Set 1 to 4 (Default: 4) Restricts the maximum children per node. **/
+    constexpr uint8_t MESH_MAX_CHILDREN = 4;            /** Set 1 to 4 (Default: 4) Restricts the maximum children per node. **/
 
     /*------------------------------------------------
     Advanced User Config
@@ -66,6 +66,7 @@ namespace RF24Mesh
     constexpr uint8_t MESH_MAX_ADDRESSES = 255;    /** Determines the max size of the array used for storing addresses on the Master Node */
     constexpr uint16_t MESH_MIN_SAVE_TIME = 30000; /** Minimum time required before changing nodeID. Prevents excessive writing to EEPROM */
     constexpr uint16_t MESH_DEFAULT_ADDRESS = RF24Network::DEFAULT_LOGICAL_ADDRESS;
+    constexpr uint16_t MESH_EMPTY_ADDRESS = RF24Network::EMPTY_LOGICAL_ADDRESS;
     constexpr uint16_t MESH_ADDRESS_HOLD_TIME = 30000; /** How long before a released address becomes available */
 }
 

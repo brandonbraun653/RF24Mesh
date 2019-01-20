@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 /* NRF Includes */
 #include "nrf24l01.hpp"
@@ -23,6 +24,11 @@
 
 namespace RF24Mesh
 {
+    struct NodeAddress
+    {
+        uint8_t id;              /**< User assigned ID number to identify (name) the node. Has nothing to do with position in tree. */
+        uint16_t logicalAddress; /**< Logical network address (octal) that identifies where the node is in the tree. */
+    };
 
     class Mesh
     {
@@ -179,20 +185,20 @@ namespace RF24Mesh
 
         uint16_t meshNetworkAddress; /**< The assigned RF24Network (Octal) address of this node */
 
-        struct AddressList
-        {
-            uint8_t nodeID;
-            uint16_t address;
-        };
-
-        uint8_t addressListTop;      /**< The number of entries in the assigned address list */
-        AddressList *addressList; /**< Pointer used for dynamic memory allocation of address list*/
+        /**
+        *   Tracks the assigned address metainformation for nodes on the network. Since this is a
+        *   vector, calls to new are occuring in the background and a memory manager that can handle
+        *   this behavior without eventually fragmenting the memory is required.
+        *
+        *   It is highly suggested to use the FreeRTOS heap_4 or heap_5 memory allocator/manager.
+        */
+        std::vector<NodeAddress> addressList;
 
         ErrorType oopsies = ErrorType::NO_ERROR;
 
     private:
-        bool processDHCPRequest;    /**< Indicator that an address request is available */
-        uint8_t nodeID; /**< TODO */
+        bool processDHCP;
+        uint8_t nodeID;
         uint8_t radioChannel;
         uint16_t lastID;
         uint16_t lastAddress;
@@ -201,6 +207,51 @@ namespace RF24Mesh
 
         RF24Network::Network &network;
         NRF24L::NRF24L01 &radio;
+
+        /**
+        *   Buffers for storing information regarding DHCP processing
+        */
+        RF24Network::Frame DHCPFrame;
+
+        /**
+        *   Releases an address from the current address list.
+        *
+        *   @note Only used on the Master node
+        *
+        *   @param[in]  address     The logical (octal) network address to be released
+        *   @return void
+        */
+        void releaseDHCPAddress(const uint16_t address);
+
+        /**
+        *   Confirms that an address recently assigned to a given node is correct
+        *
+        *   @note Only used on the Master node
+        *
+        *   @param[in]  address     The logical (octal) network address of a node which we are confirming
+        *   @return void
+        */
+        void confirmDHCPAddress(const uint16_t address);
+
+        /**
+        *   Looks up either an address or an ID and sends the result to the destination node
+        *
+        *   @note Only used on the Master node
+        *
+        *   @param[in]  lookupType  What kind of lookup to execute (Address or ID)
+        *   @param[in]  dstAddress  The logical (octal) network address where we are sending lookup results
+        *   @return void
+        */
+        void lookupDHCPAddress(const RF24Network::MessageType lookupType, const uint16_t dstAddress);
+
+        /**
+        *   Assigns a new address to the requesting node
+        *
+        *   @note Only used on the Master node
+        *
+        *   @param[in]
+        */
+        void assignDHCPAddress();
 
         /**
         *   Broadcasts to all multicast levels to find available nodes

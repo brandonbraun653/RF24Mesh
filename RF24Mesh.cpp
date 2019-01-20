@@ -20,10 +20,7 @@ namespace RF24Mesh
         meshNetworkAddress = MESH_DEFAULT_ADDRESS;
     }
 
-    bool Mesh::begin(const uint8_t channel,
-                     const NRF24L::DataRate dataRate,
-                     const NRF24L::PowerAmplitude pwr,
-                     uint32_t timeout)
+    bool Mesh::begin(const uint8_t channel, const NRF24L::DataRate dataRate, const NRF24L::PowerAmplitude pwr, uint32_t timeout)
     {
         /*------------------------------------------------
         Initialize the network to some default values. Internally also configures
@@ -44,10 +41,6 @@ namespace RF24Mesh
         ------------------------------------------------*/
         if (getNodeID() == MESH_MASTER_NODE_ID)
         {
-            //TODO: Get rid of the malloc call
-            addressList = (AddressList *)malloc(2 * sizeof(AddressList));
-            addressListTop = 0;
-
             IF_SERIAL_DEBUG(printf("%lu: MSH Initializing master node\r\n", radio.millis()););
             meshNetworkAddress = MESH_MASTER_NODE_ID;
             result = network.setAddress(meshNetworkAddress);
@@ -68,18 +61,29 @@ namespace RF24Mesh
 
     RF24Network::MessageType Mesh::update()
     {
-        auto type = network.update();
+        /*------------------------------------------------
+        Nothing to be done because begin() hasn't been called yet
+        ------------------------------------------------*/
         if (meshNetworkAddress == MESH_DEFAULT_ADDRESS)
         {
-            return type;
+            oopsies = ErrorType::NOT_CONFIGURED;
+            return RF24Network::MessageType::NO_MESSAGE;
         }
+
+        /*------------------------------------------------
+        Call the network's update function so we keep things running smoothly
+        ------------------------------------------------*/
+        auto type = network.update();
 
         /*------------------------------------------------
         Do we need to do some DHCP processing?
         ------------------------------------------------*/
-        if (type == RF24Network::MessageType::NETWORK_REQ_ADDRESS)
+        if (    (type == RF24Network::MessageType::MESH_REQ_ADDRESS)
+            ||  (type == RF24Network::MessageType::MESH_ADDR_RESPONSE)
+           )
         {
-            processDHCPRequest = true;
+            processDHCP = true;
+            DHCPFrame(network.frameBuffer);
         }
 
         /*------------------------------------------------
@@ -88,64 +92,37 @@ namespace RF24Mesh
         if (getNodeID() == MESH_MASTER_NODE_ID)
         {
             /*------------------------------------------------
-            Create a new header object and give it the frame buffer payload
+            Pull out the header information from the network layer
             ------------------------------------------------*/
-            RF24Network::Header header;
-            memcpy(&header.payload, network.frameBuffer, sizeof(RF24Network::Header));
+            RF24Network::Header header(network.frameBuffer);
 
             /*------------------------------------------------
             Process lookup requests?
             ------------------------------------------------*/
             if ((type == RF24Network::MessageType::MESH_ADDR_LOOKUP) || (type == RF24Network::MessageType::MESH_ID_LOOKUP))
             {
-                /*------------------------------------------------
-                //TODO: Add comment on why this is necessary
-                ------------------------------------------------*/
-                header.payload.dstNode = header.payload.srcNode;
-
-                if (type == RF24Network::MessageType::MESH_ADDR_LOOKUP)
-                {
-                    int16_t returnAddr = getAddress(network.frameBuffer[sizeof(RF24Network::Header)]);
-                    network.write(header, &returnAddr, sizeof(returnAddr));
-                }
-                else
-                {
-                    int16_t returnAddr = getNodeID(network.frameBuffer[sizeof(RF24Network::Header)]);
-                    network.write(header, &returnAddr, sizeof(returnAddr));
-                }
+                lookupDHCPAddress(type, header.payload.dstNode);
             }
             /*------------------------------------------------
             Maybe we need to release an address?
             ------------------------------------------------*/
             else if (type == RF24Network::MessageType::MESH_ADDR_RELEASE)
             {
-                for (uint8_t i = 0; i < addressListTop; i++)
-                {
-                    if (addressList[i].address == header.payload.srcNode)
-                    {
-                        addressList[i].address = 0;
-                    }
-                }
+                releaseDHCPAddress(header.payload.srcNode);
             }
             /*------------------------------------------------
             Maybe we need to confirm an address?
             ------------------------------------------------*/
             else if (type == RF24Network::MessageType::MESH_ADDR_CONFIRM)
             {
-                if (header.payload.srcNode == lastAddress)
-                {
-                    setAddress(lastID, lastAddress);
-                }
+                confirmDHCPAddress(header.payload.srcNode);
             }
         }
 
         return type;
     }
 
-    bool Mesh::write(const void *const data,
-                     const RF24Network::MessageType msgType,
-                     const size_t size,
-                     const uint8_t nodeID)
+    bool Mesh::write(const void *const data, const RF24Network::MessageType msgType, const size_t size, const uint8_t nodeID)
     {
         if (meshNetworkAddress == MESH_DEFAULT_ADDRESS)
         {
@@ -175,10 +152,7 @@ namespace RF24Mesh
         return writeTo(toNode, data, msgType, size);
     }
 
-    bool Mesh::writeTo(const uint16_t node,
-                       const void *const data,
-                       const RF24Network::MessageType msgType,
-                       const size_t size)
+    bool Mesh::writeTo(const uint16_t node, const void *const data, const RF24Network::MessageType msgType, const size_t size)
     {
         if (meshNetworkAddress == MESH_DEFAULT_ADDRESS)
         {
@@ -268,11 +242,11 @@ namespace RF24Mesh
         {
             uint16_t address = 0;
 
-            for (uint8_t i = 0; i < addressListTop; i++)
+            for (uint8_t i = 0; i < addressList.size(); i++)
             {
-                if (addressList[i].nodeID == nodeID)
+                if (addressList[i].id == nodeID)
                 {
-                    address = addressList[i].address;
+                    address = addressList[i].logicalAddress;
                     return address;
                 }
             }
@@ -326,7 +300,7 @@ namespace RF24Mesh
         Pull our assigned address from the network frame buffer
         ------------------------------------------------*/
         int16_t address = 0;
-        memcpy(&address, network.frameBuffer + sizeof(RF24Network::Header), sizeof(address));
+        memcpy(&address, network.frameBuffer + sizeof(RF24Network::Header::Payload_t), sizeof(address));
         return address >= 0 ? address : -2;
     }
 
@@ -349,11 +323,11 @@ namespace RF24Mesh
             /*------------------------------------------------
             Look through our address list to find the node id
             ------------------------------------------------*/
-            for (uint8_t i = 0; i < addressListTop; i++)
+            for (uint8_t i = 0; i < addressList.size(); i++)
             {
-                if (addressList[i].address == address)
+                if (addressList[i].logicalAddress == address)
                 {
-                    return addressList[i].nodeID;
+                    return addressList[i].id;
                 }
             }
         }
@@ -505,25 +479,21 @@ namespace RF24Mesh
 
     bool Mesh::requestAddress(const uint8_t level)
     {
-        IF_SERIAL_DEBUG(printf("%lu: MSH Poll\r\n", radio.millis()); );
+        /*------------------------------------------------
+        Initialize local variables
+        ------------------------------------------------*/
+        uint8_t pollCount = 0;                         /* How many successfull polls we've hit */
+        uint32_t timer = radio.millis();               /* Start time of this process */
+        std::array<uint16_t, MESH_MAXPOLLS> pollNodes; /* Which nodes we've successfully polled against */
+
+        pollNodes.fill(RF24Network::EMPTY_LOGICAL_ADDRESS);
 
         /*------------------------------------------------
-        Reach out to another radio, any radio at all
+        Reach out to all radios at a given level and see if one responds
+        saying that it has a space to join the network.
         ------------------------------------------------*/
-        RF24Network::Header header(RF24Network::MULTICAST_NODE, RF24Network::MessageType::NETWORK_POLL);
+        RF24Network::Header header(RF24Network::MULTICAST_ADDRESS, RF24Network::MessageType::NETWORK_POLL);
         network.multicast(header, nullptr, 0, level);
-
-        /*------------------------------------------------
-        Initialize some variables...
-        ------------------------------------------------*/
-        uint8_t pollCount = 0;
-        uint32_t timer = radio.millis();
-        uint16_t contactNode[MESH_MAXPOLLS];
-
-        for (uint8_t i = 0; i < MESH_MAXPOLLS; i++)
-        {
-            contactNode[i] = RF24Network::EMPTY_LOGICAL_ADDRESS;
-        }
 
         /*------------------------------------------------
         Wait for a radio (contact node) to respond
@@ -532,14 +502,13 @@ namespace RF24Mesh
         {
             /*------------------------------------------------
             Has the networking layer received a poll response from some node?
-            If so, store that node's address in a buffer.
+            If so, store that node's logical address in a buffer.
             ------------------------------------------------*/
             if (network.update() == RF24Network::MessageType::NETWORK_POLL)
             {
-                RF24Network::Header::Payload_t payload;
-                memcpy(&payload, network.frameBuffer, sizeof(payload));
+                header(network.frameBuffer);
 
-                contactNode[pollCount] = payload.srcNode;
+                pollNodes[pollCount] = header.payload.srcNode;
                 pollCount++;
             }
 
@@ -566,59 +535,63 @@ namespace RF24Mesh
         }
 
         /*------------------------------------------------
-        An adjacent radio was found! Try to get it to forward the network address request.
+        An adjacent radio was found! Try to route through each one to reach the master
+        and get our new address. Should the Master node respond, the node that response
+        came through is stored into 'contactNode'.
         ------------------------------------------------*/
-        IF_SERIAL_DEBUG(printf("%lu MSH: Got poll from level [%d], count [%d]\n", radio.millis(), level, pollCount););
+        IF_SERIAL_DEBUG(printf("%lu: MSH Got poll from level [%d], count [%d]\n", radio.millis(), level, pollCount););
 
-        RF24Network::MessageType type = RF24Network::MessageType::MIN_USER_DEFINED_HEADER_TYPE;
+        uint16_t contactNode = RF24Network::EMPTY_LOGICAL_ADDRESS;
+
         for (uint8_t i = 0; i < pollCount; i++)
         {
             /*------------------------------------------------
             Prevent us from trying to contact an invalid node
             ------------------------------------------------*/
-            if (!network.isValidNetworkAddress(contactNode[i]))
+            if (!network.isValidNetworkAddress(pollNodes[i]))
             {
                 continue;
             }
+            uint16_t pollNode = pollNodes[i];
 
-            /*------------------------------------------------
-            Request an address via the contact node
-            ------------------------------------------------*/
-            header.payload.msgType = static_cast<uint8_t>(RF24Network::MessageType::NETWORK_REQ_ADDRESS);
+            header.payload.msgType = static_cast<uint8_t>(RF24Network::MessageType::MESH_REQ_ADDRESS);
             header.payload.reserved = getNodeID();
-            header.payload.dstNode = contactNode[i];
+            header.payload.dstNode = pollNodes[i];
             header.payload.srcNode = network.getLogicalAddress();
 
             /*------------------------------------------------
-            Do a direct write (no ack) to the contact node. Include the nodeId and address.
+            Send a message back to our poll node requesting an address. The poll node will then
+            forward the address up to the master node. The master node will unpack the message
+            and see that the request originated from a potential child of the poll node and assign
+            the address appropriately, assuming the poll node as the new parent.
             ------------------------------------------------*/
-            network.write(header, 0, 0, contactNode[i]);
-            IF_SERIAL_DEBUG(printf("%lu MSH: Request address from node [0%o]\n", radio.millis(), contactNode[i]););
+            IF_SERIAL_DEBUG(printf("%lu MSH: Request address from node [0%o]\n", radio.millis(), pollNode););
+            network.write(header, &pollNode, sizeof(pollNode), pollNode);
 
             /*------------------------------------------------
-            Wait for a response from our contact node
+            Wait for a response from Master through our poll node
             ------------------------------------------------*/
             timer = radio.millis();
             while ((radio.millis() - timer) < 225)
             {
-                type = network.update();
-
                 /*------------------------------------------------
-                Did we get any response at all? Break out of the while and for loop.
+                Save which node we talked to succesfully and then break out of the while and for loop.
                 ------------------------------------------------*/
-                if (type == RF24Network::MessageType::NETWORK_ADDR_RESPONSE)
+                if (network.update() == RF24Network::MessageType::MESH_ADDR_RESPONSE)
                 {
+                    contactNode = pollNodes[i];
                     i = pollCount;
                     break;
                 }
             }
+
             radio.delayMilliseconds(5);
         }
 
         /*------------------------------------------------
-        No response from one of those nodes we found before?
+        No response from any of those nodes we found before?
         ------------------------------------------------*/
-        if (type != RF24Network::MessageType::NETWORK_ADDR_RESPONSE)
+        if (contactNode == RF24Network::EMPTY_LOGICAL_ADDRESS)
         {
             oopsies = ErrorType::NO_RESPONSE;
             return false;
@@ -628,38 +601,32 @@ namespace RF24Mesh
         Pull the new address out from the network frame buffer
         ------------------------------------------------*/
         uint16_t newAddress = 0;
-        memcpy(&newAddress, network.frameBuffer + sizeof(RF24Network::Header), sizeof(newAddress));
+        memcpy(&header.payload, network.frameBuffer, sizeof(RF24Network::Header::Payload_t));
+        memcpy(&newAddress, network.frameBuffer + sizeof(RF24Network::Header::Payload_t), sizeof(newAddress));
 
         /*------------------------------------------------
-        Check that the address received was valid
+        Is the address invalidated? This can happen if:
+            1. Address is zero
+            2. The destination node is not ourselves (stored in the reserved byte)
         ------------------------------------------------*/
-        if (!newAddress || (network.frameBuffer[7] != getNodeID()))
+        if (!newAddress || (header.payload.reserved != getNodeID()))
         {
             IF_SERIAL_DEBUG(printf("%lu: Response discarded, wrong node 0%o from node 0%o sending node 0%o id %d\r\n",
-                radio.millis(), newAddress, header.payload.srcNode, MESH_DEFAULT_ADDRESS, network.frameBuffer[7]););
+                radio.millis(), newAddress, header.payload.srcNode, MESH_DEFAULT_ADDRESS, header.payload.reserved););
 
             oopsies = ErrorType::FAILED_ADDR_REQUEST;
             return false;
         }
 
         /*------------------------------------------------
-        Internally assign the new address to the mesh
+        Let the Master node know we received the address ok
         ------------------------------------------------*/
-        IF_SERIAL_DEBUG(printf("%lu: Set current address 0%o to new address 0%o\r\n", radio.millis(), meshNetworkAddress, newAddress););
-        meshNetworkAddress = newAddress;
-
-        /*------------------------------------------------
-        Verify to the master node that we received the address
-        ------------------------------------------------*/
-        radio.stopListening();
-        radio.delayMilliseconds(10);
-
-        network.setAddress(meshNetworkAddress);
         header.payload.dstNode = MESH_MASTER_NODE_ID;
+        header.payload.srcNode = getNodeID();
         header.payload.msgType = static_cast<uint8_t>(RF24Network::MessageType::MESH_ADDR_CONFIRM);
 
         uint8_t registerAddrCount = 0u;
-        while (!network.write(header, nullptr, 0))
+        while (!network.write(header, nullptr, 0, contactNode))
         {
             if (registerAddrCount++ >= 6)
             {
@@ -671,6 +638,17 @@ namespace RF24Mesh
             radio.delayMilliseconds(3);
         }
 
+        /*------------------------------------------------
+        Internally assign the new address
+        ------------------------------------------------*/
+        IF_SERIAL_DEBUG(printf("%lu: Set current address 0%o to new address 0%o\r\n", radio.millis(), meshNetworkAddress, newAddress););
+        meshNetworkAddress = newAddress;
+
+        radio.stopListening();
+        radio.delayMilliseconds(10);
+
+        network.setAddress(meshNetworkAddress);
+
         return true;
     }
 
@@ -679,16 +657,16 @@ namespace RF24Mesh
         this->nodeID = nodeID;
     }
 
-    void Mesh::setAddress(uint8_t nodeID, uint16_t address)
+    void Mesh::setAddress(const uint8_t nodeID, const uint16_t address)
     {
-        uint8_t position = addressListTop;
+        uint8_t position = addressList.size();
 
         /*------------------------------------------------
         Search through the address list for the position of the nodeID
         ------------------------------------------------*/
-        for (uint8_t i = 0; i < addressListTop; i++)
+        for (uint8_t i = 0; i < addressList.size(); i++)
         {
-            if (addressList[i].nodeID == nodeID)
+            if (addressList[i].id == nodeID)
             {
                 position = i;
                 break;
@@ -698,18 +676,14 @@ namespace RF24Mesh
         /*------------------------------------------------
         Update the address list information
         ------------------------------------------------*/
-        addressList[position].nodeID = nodeID;
-        addressList[position].address = address;
-
-        /*------------------------------------------------
-        If we are at the top of the list, grab some more memory, nom nom.
-        ------------------------------------------------*/
-        if (position == addressListTop)
+        if (position == addressList.size())
         {
-            addressListTop++;
-
-            //TODO: Get rid of realloc
-            addressList = (AddressList *)realloc(addressList, (addressListTop + 1) * sizeof(AddressList));
+            addressList.push_back({nodeID, address});
+        }
+        else
+        {
+            addressList[position].id = nodeID;
+            addressList[position].logicalAddress = address;
         }
     }
 
@@ -718,151 +692,214 @@ namespace RF24Mesh
         /*------------------------------------------------
         Only process the DHCP reqests as flagged in the update() function
         ------------------------------------------------*/
-        if (!processDHCPRequest)
+        if (!processDHCP)
         {
             return;
         }
 
-        processDHCPRequest = false;
+        processDHCP = false;
 
         /*------------------------------------------------
         Get the unique ID of the requester
         ------------------------------------------------*/
-        RF24Network::Header header;
-        memcpy(&header.payload, network.frameBuffer, sizeof(RF24Network::Header));
-
-        uint8_t fromID = header.payload.reserved;
-        if (!fromID)
+        if (!DHCPFrame.header.payload.reserved)
         {
             IF_SERIAL_DEBUG(printf("MSH: DHCP invalid id 0 rcvd\n"););
             return;
         }
-
-        uint16_t fromNode = 0;
-        uint8_t shiftVal = 0;
-        bool extraChild = 0;
+        IF_SERIAL_DEBUG(printf("%lu MSH: Received address request from 0%o\r\n", radio.millis(), DHCPFrame.header.payload.srcNode););
 
         /*------------------------------------------------
-        Process if the message came from a child's descendant
+        Process address requests from a child node
         ------------------------------------------------*/
-        if (header.payload.srcNode != MESH_DEFAULT_ADDRESS)
+        if (DHCPFrame.header.payload.msgType == static_cast<uint8_t>(RF24Network::MessageType::MESH_REQ_ADDRESS))
         {
-            fromNode = header.payload.srcNode;
-            uint16_t temp = fromNode;
-            uint8_t numOctalAddrDigits = 0;
+
 
             /*------------------------------------------------
-            Figure out how many digits there are in the octal address
+            If we aren't the master node, we need to foward the message
             ------------------------------------------------*/
-            while (temp)
+            if (this->nodeID != MESH_MASTER_NODE_ID)
             {
                 /*------------------------------------------------
-                Octal addresses convert nicely to binary in threes.
-                Address 03 = B011
-                Address 033 = B011011
+                The first two bytes of the address request message indicates the parent node
+                (from the perspective of the requestor) that was used to initiate the process.
                 ------------------------------------------------*/
-                temp >>= RF24Network::OCTAL_TO_BIN_BITSHIFT;
-                numOctalAddrDigits++;
-            }
+                uint16_t parentNode;
+                memcpy(&parentNode, DHCPFrame.message.begin(), sizeof(parentNode));
 
-            /*------------------------------------------------
-            Now we know how many bits to shift when adding a child node 1-5 (B001 to B101) to any address
-            ------------------------------------------------*/
-            shiftVal = numOctalAddrDigits * RF24Network::OCTAL_TO_BIN_BITSHIFT;
+                /*------------------------------------------------
+                Do we also happen to be the parent node? Assign an extra byte that allows
+                the master to know what address slots we have available.
+                ------------------------------------------------*/
+                if(network.getLogicalAddress() == parentNode)
+                {
+                    DHCPFrame.message[3] = network.childBitField();
+                }
+
+                /*------------------------------------------------
+                Forward directly to the master node
+                ------------------------------------------------*/
+                DHCPFrame.header.payload.srcNode = network.getLogicalAddress();
+                DHCPFrame.header.payload.dstNode = MESH_MASTER_NODE_ID;
+
+                network.write(DHCPFrame.header, DHCPFrame.message.begin(), DHCPFrame.message.size(), MESH_MASTER_NODE_ID);
+            }
+            else
+            {
+                assignDHCPAddress();
+            }
         }
-        /*------------------------------------------------
-        Otherwise the request is coming from level 1 and we need to add a child to the master
-        ------------------------------------------------*/
+
+        if (DHCPFrame.header.payload.msgType == static_cast<uint8_t>(RF24Network::MessageType::MESH_ADDR_RESPONSE))
+        {
+            /*------------------------------------------------
+            The first byte of the address request indicates the poll node that was
+            used to initiate the process. If that is us, keep track of the new assignment
+            for our child, then forward the message on directly. (unwrap the
+            ------------------------------------------------*/
+//            if (network.getLogicalAddress() == DHCPFrame.message[0])
+//            {
+//            }
+
+//            uint16_t requester = DEFAULT_LOGICAL_ADDRESS;
+//            if (requester != this->logicalNodeAddress)
+//            {
+//                header.payload.dstNode = requester;
+//                writeDirect(header.payload.dstNode, MessageType::USER_TX_TO_PHYSICAL_ADDRESS);
+//                radio.delayMilliseconds(10);
+//                writeDirect(header.payload.dstNode, MessageType::USER_TX_TO_PHYSICAL_ADDRESS);
+//                continue;
+//            }
+        }
+    }
+
+    void Mesh::releaseDHCPAddress(const uint16_t address)
+    {
+        for (uint8_t i = 0; i < addressList.size(); i++)
+        {
+            if (addressList[i].logicalAddress == address)
+            {
+                addressList[i].logicalAddress = MESH_EMPTY_ADDRESS;
+            }
+        }
+    }
+
+    void Mesh::confirmDHCPAddress(const uint16_t address)
+    {
+        if (address == lastAddress)
+        {
+            setAddress(lastID, lastAddress);
+        }
+    }
+
+    void Mesh::lookupDHCPAddress(const RF24Network::MessageType lookupType, const uint16_t dstAddress)
+    {
+        RF24Network::Header header(dstAddress);
+        const size_t dataOffset = sizeof(RF24Network::Header::Payload_t);
+
+        if (lookupType == RF24Network::MessageType::MESH_ADDR_LOOKUP)
+        {
+            int16_t returnAddr = getAddress(network.frameBuffer[dataOffset]);
+            network.write(header, &returnAddr, sizeof(returnAddr));
+        }
         else
         {
-            extraChild = true;
+            int16_t returnAddr = getNodeID(network.frameBuffer[dataOffset]);
+            network.write(header, &returnAddr, sizeof(returnAddr));
         }
+    }
 
-        IF_SERIAL_DEBUG(printf("%lu MSH: Rcv addr req from_id %d\r\n", radio.millis(), fromNode););
+    void Mesh::assignDHCPAddress()
+    {
+        /*------------------------------------------------
+        The first two bytes of the address request message indicates the parent node
+        (from the perspective of the requestor) that was used to initiate the process.
+        ------------------------------------------------*/
+        uint16_t parentNode = 0u;
+        uint8_t availableAddr = 0u;
+        memcpy(&parentNode, DHCPFrame.message.begin(), sizeof(parentNode));
+
+        if ((DHCPFrame.header.payload.dstNode == MESH_MASTER_NODE_ID) && (DHCPFrame.header.payload.srcNode == MESH_DEFAULT_ADDRESS))
+        {
+            /*------------------------------------------------
+            We (master) ARE the parent node.
+            ------------------------------------------------*/
+            availableAddr = network.childBitField();
+        }
+        else
+        {
+            /*------------------------------------------------
+            The parent node is somewhere else in the network. The data will
+            be attached to the message.
+            ------------------------------------------------*/
+            availableAddr = DHCPFrame.message[3];
+        }
 
         /*------------------------------------------------
         Generate a new address and assign it to the requesting node
         ------------------------------------------------*/
-        uint16_t newAddress;
-        for (int i = MESH_MAX_CHILDREN + extraChild; i > 0; i--)
+        uint16_t newAddress = 0u;
+
+        //Find first bit that is zero
+        uint8_t idx = 0;
+        for (uint8_t i = 0; i < CHAR_BIT; i++)
         {
-            /*------------------------------------------------
-            Calculate a new address
-            ------------------------------------------------*/
-            newAddress = fromNode | (i << shiftVal);
-            if (!newAddress)
+            if (!(availableAddr & (1u << i)))
             {
-                continue;
-            }
-
-            /*------------------------------------------------
-            Make sure the new address hasn't already been assigned
-            ------------------------------------------------*/
-            bool found = false;
-            for (uint8_t i = 0; i < this->addressListTop; i++)
-            {
-                IF_SERIAL_DEBUG(printf("ID: %d ADDR: 0%o\r\n", addressList[i].nodeID, addressList[i].address););
-
-                if (((addressList[i].address == newAddress) && (addressList[i].nodeID != fromID)) || newAddress == MESH_DEFAULT_ADDRESS)
-                {
-                    found = true;
-                    break;
-                }
-            }
-
-            /*------------------------------------------------
-            We have an unassigned address. Let the requester know.
-            ------------------------------------------------*/
-            if (!found)
-            {
-                header.payload.msgType = static_cast<uint8_t>(RF24Network::MessageType::NETWORK_ADDR_RESPONSE);
-                header.payload.dstNode = header.payload.srcNode;
-
-                radio.delayMilliseconds(10);
-
-                /*------------------------------------------------
-                This is a routed request to Master (ie master forwards it to the proper node)
-                ------------------------------------------------*/
-                if (header.payload.srcNode != MESH_DEFAULT_ADDRESS)
-                {
-                    //Is NOT node 01 to 05
-                    radio.delayMilliseconds(2);
-                    network.write(header, &newAddress, sizeof(newAddress));
-                }
-                /*------------------------------------------------
-                Otherwise send it to the next node
-                ------------------------------------------------*/
-                else
-                {
-                    radio.delayMilliseconds(2);
-                    network.write(header, &newAddress, sizeof(newAddress), header.payload.dstNode);
-                }
-
-                /*------------------------------------------------
-                Wait for the requesting node to tell us to confirm the address
-                ------------------------------------------------*/
-                uint32_t timer = radio.millis();
-                lastAddress = newAddress;
-                lastID = fromID;
-                while (network.update() != RF24Network::MessageType::MESH_ADDR_CONFIRM)
-                {
-                    if ((radio.millis() - timer) > network.routeTimeout)
-                    {
-                        oopsies = ErrorType::TIMEOUT;
-                        return;
-                    }
-                }
-
-                setAddress(fromID, newAddress);
-                IF_SERIAL_DEBUG(printf("Sent to 0%o phys: 0%o new: 0%o id: %d\r\n",
-                    header.payload.dstNode, MESH_DEFAULT_ADDRESS, newAddress, header.payload.reserved););
+                idx = i + 1;
                 break;
             }
-            else
+        }
+
+        auto level = RF24Network::Node::getLevel(parentNode);
+
+        newAddress = parentNode | ((idx & RF24Network::OCTAL_MASK) << (level * RF24Network::OCTAL_TO_BIN_BITSHIFT));
+
+
+        DHCPFrame.header.payload.msgType = static_cast<uint8_t>(RF24Network::MessageType::MESH_ADDR_RESPONSE);
+        DHCPFrame.header.payload.dstNode = DHCPFrame.header.payload.srcNode;
+
+        radio.delayMilliseconds(10);
+
+        /*------------------------------------------------
+        This is a routed request to Master (ie master forwards it to the proper node)
+        ------------------------------------------------*/
+        uint8_t nodeID = DHCPFrame.header.payload.reserved;
+        uint16_t srcNode = DHCPFrame.header.payload.srcNode;
+
+        if (DHCPFrame.header.payload.srcNode != MESH_DEFAULT_ADDRESS)
+        {
+            network.write(DHCPFrame.header, &newAddress, sizeof(newAddress));
+        }
+        else
+        {
+            network.write(DHCPFrame.header, &newAddress, sizeof(newAddress), DHCPFrame.header.payload.dstNode);
+        }
+
+        /*------------------------------------------------
+        Wait for the requesting node to tell us to confirm the address
+        ------------------------------------------------*/
+        uint32_t timer = radio.millis();
+        lastAddress = newAddress;
+        lastID = srcNode;
+
+        while (network.update() != RF24Network::MessageType::MESH_ADDR_CONFIRM)
+        {
+            if ((radio.millis() - timer) > network.routeTimeout)
             {
-                IF_SERIAL_DEBUG(printf("not allocated\r\n"););
+                oopsies = ErrorType::TIMEOUT;
+                IF_SERIAL_DEBUG(printf("%lu: MSH Timeout waiting for address confirmation from ID: 0%o\r\n", radio.millis(), srcNode););
+                return;
             }
         }
+
+        /*------------------------------------------------
+        Update the internal address information
+        ------------------------------------------------*/
+        setAddress(nodeID, newAddress);
+        IF_SERIAL_DEBUG(printf("%lu: MSH Sent to 0%o phys: 0%o new: 0%o id: %d\r\n",
+            radio.millis(), DHCPFrame.header.payload.dstNode, MESH_DEFAULT_ADDRESS, newAddress, DHCPFrame.header.payload.reserved););
     }
 
 } /* !RF24Mesh */
