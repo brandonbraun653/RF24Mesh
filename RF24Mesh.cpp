@@ -130,17 +130,17 @@ namespace RF24Mesh
             return false;
         }
 
-
         int16_t toNode = 0;
         int32_t lookupTimeout = radio.millis() + MESH_LOOKUP_TIMEOUT;
         uint32_t retryDelay = 50;
 
         if (nodeID)
         {
-            while ((toNode = getAddress(nodeID)) < 0)
+            toNode = getAddress(nodeID);
+            while (toNode < 0)
             {
-                //TODO: Add better naming to this -2
-                if (radio.millis() > lookupTimeout || toNode == -2)
+                // TODO: Add better naming to this -2
+                if ((radio.millis() > lookupTimeout) || (toNode == -2))
                 {
                     return false;
                 }
@@ -149,6 +149,7 @@ namespace RF24Mesh
                 radio.delayMilliseconds(retryDelay);
             }
         }
+
         return writeTo(toNode, data, msgType, size);
     }
 
