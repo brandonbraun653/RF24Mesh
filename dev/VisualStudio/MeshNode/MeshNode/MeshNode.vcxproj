@@ -47,16 +47,18 @@
       <CLanguageStandard>C11</CLanguageStandard>
       <SupportExceptions>false</SupportExceptions>
       <SupportRTTI>false</SupportRTTI>
+      <Optimization>Og</Optimization>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|VisualGDB'">
     <ClCompile>
       <AdditionalIncludeDirectories>$(GIT_PROJECTS_ROOT)\DeviceDrivers\nRF24L01;$(GITHUB_ROOT)\RF24Mesh;$(GITHUB_ROOT)\RF24Ethernet\utility;$(GITHUB_ROOT)\RF24Ethernet;$(GITHUB_ROOT)\RF24Network;$(BOOST_ROOT)\boost_1_68_0;$(CHIMERA_ROOT);$(THOR_ROOT)\Thor\lib\FreeRTOS\config\stm32;$(THOR_ROOT)\Thor\lib\FreeRTOS\portable\GCC\ARM_CM4F;$(THOR_ROOT)\Thor\lib\FreeRTOS\include;$(THOR_ROOT)\Thor\lib\stm32hal_f4\STM32F4xx_HAL_Driver\Inc;$(THOR_ROOT)\Thor\lib\stm32hal_f4\Device\include;$(THOR_ROOT)\Thor\lib\stm32hal_f4\Device\conf;$(THOR_ROOT)\Thor\lib\cmsis\CMSIS\Core\Include;$(THOR_ROOT)\Thor;%(ClCompile.AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>%(ClCompile.PreprocessorDefinitions);NDEBUG=1;RELEASE=1;STM32F466xx;USE_FULL_LL_DRIVER;BOOST_NO_EXCEPTIONS;USE_FREERTOS;USING_FREERTOS;USING_CHIMERA</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(ClCompile.PreprocessorDefinitions);NDEBUG=1;RELEASE=1;STM32F446xx;USE_FULL_LL_DRIVER;BOOST_NO_EXCEPTIONS;USE_FREERTOS;USING_FREERTOS;USING_CHIMERA</PreprocessorDefinitions>
       <CPPLanguageStandard>CPP14</CPPLanguageStandard>
       <CLanguageStandard>C11</CLanguageStandard>
       <SupportExceptions>false</SupportExceptions>
       <SupportRTTI>false</SupportRTTI>
+      <Optimization>Os</Optimization>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -66,6 +68,7 @@
   </ImportGroup>
   <ItemGroup>
     <ClCompile Include="mesh_node.cpp" />
+    <ClInclude Include="..\..\..\..\..\Chimera\Chimera\utilities\circular_buffer.hpp" />
     <ClInclude Include="mesh_node.hpp" />
     <None Include="stm32.props" />
     <ClCompile Include="$(EFP_BASE)\Profiler\FastSemihosting.cpp" />

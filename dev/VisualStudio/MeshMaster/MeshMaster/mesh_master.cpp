@@ -91,7 +91,7 @@ void meshMasterThread(void *argument)
             network.peek(header);
 
             uint32_t data = 0u;
-            switch (header.payload.msgType)
+            switch (header.data.msgType)
             {
             case static_cast<uint8_t>(RF24Network::MessageType::M):
                 network.read(header, &data, sizeof(data));
@@ -99,7 +99,7 @@ void meshMasterThread(void *argument)
 
             default:
                 network.read(header, 0, 0);
-                printf("%d\r\n", static_cast<uint8_t>(header.payload.msgType));
+                printf("%d\r\n", static_cast<uint8_t>(header.data.msgType));
             }
         }
 

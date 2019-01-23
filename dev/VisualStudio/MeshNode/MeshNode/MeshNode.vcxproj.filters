@@ -79,6 +79,9 @@
     <Filter Include="VisualGDB settings">
       <UniqueIdentifier>{ce6e777b-7bb4-4d83-969d-b3b94cd76dcf}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Chimera\utilities">
+      <UniqueIdentifier>{692ca669-ffc2-4096-930d-8d1d7f7d877f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="stm32.props">
@@ -981,6 +984,9 @@
   <ItemGroup>
     <ClInclude Include="mesh_node.hpp">
       <Filter>Source files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\Chimera\Chimera\utilities\circular_buffer.hpp">
+      <Filter>Chimera\utilities</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
